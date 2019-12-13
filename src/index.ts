@@ -10,7 +10,6 @@ export interface TreeNode {
 	url: string;
 	method: string;
 	encodedBytes: number;
-	value: number;
 	type: Network.ResourceType;
 	// params: Network.RequestWillBeSentParams;
 	frameId: string;
@@ -25,7 +24,6 @@ function createNode(params: Network.RequestWillBeSentParams, size: Network.Loadi
 		method: params.request.method,
 		type: params.type,
 		encodedBytes: size?.encodedDataLength,
-		value: size?.encodedDataLength ? size.encodedDataLength : 0,
 		frameId: params.frameId,
 		// params,
 		children: []

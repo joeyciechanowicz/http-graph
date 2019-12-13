@@ -32,10 +32,10 @@ describe('Basic', () => {
 
         expect(totalRequests).toEqual(3);
 
-        expect(tree[pageUrl]).toBeDefined();
+        expect(tree).toBeDefined();
 
-        expect(Object.keys(tree[pageUrl].children).length).toEqual(2);
-        expect(tree[pageUrl].children[`${base}/assets/small-image.png`].encodedBytes).toEqual(4064);
+        expect(tree.children.length).toEqual(2);
+        expect(tree.children[0].encodedBytes).toEqual(4064);
 
         expect(tree).toHaveRequestChain(
             pageUrl,
@@ -57,7 +57,7 @@ describe('Basic', () => {
 
         expect(totalRequests).toEqual(4);
 
-        expect(tree[pageUrl]).toBeDefined();
+        expect(tree).toBeDefined();
 
         expect(tree).toHaveRequestChain(
             pageUrl,
@@ -114,7 +114,7 @@ describe('Basic', () => {
 
         // console.log(inspect(tree, false, null, true));
 
-        expect(totalRequests).toEqual(7);
+        expect(totalRequests).toEqual(8);
 
         await prettyPrintTree('test.html', tree);
 

@@ -22,7 +22,7 @@
 	const height = window.innerHeight - 30;
 
 	const format = d3.format(',d');
-	const color = d3.scaleSequential([8, 0], d3.interpolateMagma);
+	const color = d3.scaleSequential([8, 0], d3.interpolateWarm);
 
 	const treemap = data => d3.treemap()
 		.size([width, height])
@@ -31,7 +31,7 @@
 		.paddingInner(1)
 		.round(true)
 		(d3.hierarchy(data)
-			.sum(d =>  d.value)
+			.sum(d =>  d.encodedBytes)
 			.sort((a, b) => b.value - a.value));
 
 	const root = treemap(data);
@@ -59,7 +59,13 @@
 		.attr('transform', d => `translate(${d.x0},${d.y0})`);
 
 	node.append('title')
-		.text(d => `${d.ancestors().reverse().map(d => d.data.url).join('/')}\n${format(d.value)}`);
+		.text(d => {
+			return [
+				d.data.url,
+                `${format(d.data.encodedBytes)} bytes`,
+				`${format(d.value)} total bytes`
+            ].join('\n');
+        });
 
 	node.append('rect')
 		.attr('id', (d, i) => (d.nodeUid = `node-${i}`))
@@ -76,18 +82,20 @@
 		.attr('clip-path', d => d.clipUid)
 		.selectAll('tspan')
 		.data(d => {
-			return `${d.data.url} ${d.value} ${d.data.encodedBytes}`;
+			return [d.data.url, d.value, d.data.encodedBytes];
 			// return d.data.url.split(/(?=[A-Z][^A-Z])/g).concat(format(d.data.encodedBytes))
 		})
 		.join('tspan')
 		.attr('fill-opacity', (d, i, nodes) => i === nodes.length - 1 ? 0.7 : null)
-		.text(d => d);
+		.text(d => {
+			return d;
+		});
 
 	node.filter(d => d.data.children).selectAll('tspan')
 		.attr('dx', 3)
 		.attr('y', 13);
 
-	node.filter(d => !d.data.children).selectAll('tspan')
+	node.filter(d => !d.data.children || d.data.children.length === 0).selectAll('tspan')
 		.attr('x', 3)
 		.attr('y', (d, i, nodes) => `${(i === nodes.length - 1) * 0.3 + 1.1 + i * 0.9}em`);
 

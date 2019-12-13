@@ -1,4 +1,9 @@
-fetch(`/assets/some-data.json`)
+fetch(`/assets/some-data-large.json`)
+	.then(x => x.json())
+	.then(data => {
+		console.log(data);
+		return fetch('/assets/some-data-small');
+	})
 	.then(x => x.json())
 	.then(data => {
 		console.log(data);

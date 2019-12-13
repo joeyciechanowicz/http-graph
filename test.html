@@ -14,7 +14,7 @@
 
 
 <script type="text/javascript">
-	const data = {"requestId":"F467B808225139AF2185FCA007D797C1","url":"http://localhost:8080/iframe-with-redirects.html","method":"GET","type":"Document","encodedBytes":469,"value":469,"frameId":"A59D82757E2B8ECB98ECF5652BA2E61E","children":[{"requestId":"837DAB5BF6E8436B340C66C4AB629C6B","url":"http://localhost:8080/redirect-asset.html","method":"GET","type":"Document","encodedBytes":453,"value":453,"frameId":"7EBC9FF5A90CF14150CD2299AE7BC923","children":[{"requestId":"35532.3","url":"http://localhost:8080/redirect-js","method":"GET","type":"Script","encodedBytes":438,"value":438,"frameId":"7EBC9FF5A90CF14150CD2299AE7BC923","children":[{"requestId":"35532.3","url":"http://localhost:8080/redirect-two","method":"GET","type":"Script","encodedBytes":438,"value":438,"frameId":"7EBC9FF5A90CF14150CD2299AE7BC923","children":[{"requestId":"35532.3","url":"http://localhost:8080/js/load-script.js","method":"GET","type":"Script","encodedBytes":438,"value":438,"frameId":"7EBC9FF5A90CF14150CD2299AE7BC923","children":[{"requestId":"35532.5","url":"http://localhost:8080/js/load-other.js","method":"GET","type":"Script","encodedBytes":401,"value":401,"frameId":"7EBC9FF5A90CF14150CD2299AE7BC923","children":[{"requestId":"35532.6","url":"http://localhost:8080/assets/some-data.json","method":"GET","type":"Fetch","encodedBytes":319,"value":319,"frameId":"7EBC9FF5A90CF14150CD2299AE7BC923","children":[]}]}]}]}]}]}]};
+	const data = {"requestId":"DA43A0A0D8E5541896F8B3394D9979A0","url":"http://localhost:8080/iframe-with-redirects.html","method":"GET","type":"Document","encodedBytes":469,"frameId":"1E402DDE64DCEEAF4E77BB482CB7A987","children":[{"requestId":"1F822DC3BE8B7F6D0BEBA8FCE0244AC5","url":"http://localhost:8080/redirect-asset.html","method":"GET","type":"Document","encodedBytes":453,"frameId":"1C3DA69DE4D2825960213E48935CB833","children":[{"requestId":"36328.3","url":"http://localhost:8080/redirect-js","method":"GET","type":"Script","encodedBytes":438,"frameId":"1C3DA69DE4D2825960213E48935CB833","children":[{"requestId":"36328.3","url":"http://localhost:8080/redirect-two","method":"GET","type":"Script","encodedBytes":438,"frameId":"1C3DA69DE4D2825960213E48935CB833","children":[{"requestId":"36328.3","url":"http://localhost:8080/js/load-script.js","method":"GET","type":"Script","encodedBytes":438,"frameId":"1C3DA69DE4D2825960213E48935CB833","children":[{"requestId":"36328.5","url":"http://localhost:8080/js/load-other.js","method":"GET","type":"Script","encodedBytes":515,"frameId":"1C3DA69DE4D2825960213E48935CB833","children":[{"requestId":"36328.6","url":"http://localhost:8080/assets/some-data-large.json","method":"GET","type":"Fetch","encodedBytes":8401,"frameId":"1C3DA69DE4D2825960213E48935CB833","children":[]},{"requestId":"36328.7","url":"http://localhost:8080/assets/some-data-small","method":"GET","type":"Fetch","encodedBytes":410,"frameId":"1C3DA69DE4D2825960213E48935CB833","children":[]}]}]}]}]}]}]};
 
 	// const width = 954;
 	const width = window.innerWidth;
@@ -22,7 +22,7 @@
 	const height = window.innerHeight - 30;
 
 	const format = d3.format(',d');
-	const color = d3.scaleSequential([8, 0], d3.interpolateMagma);
+	const color = d3.scaleSequential([8, 0], d3.interpolateWarm);
 
 	const treemap = data => d3.treemap()
 		.size([width, height])
@@ -31,7 +31,7 @@
 		.paddingInner(1)
 		.round(true)
 		(d3.hierarchy(data)
-			.sum(d =>  d.value)
+			.sum(d =>  d.encodedBytes)
 			.sort((a, b) => b.value - a.value));
 
 	const root = treemap(data);
@@ -59,7 +59,13 @@
 		.attr('transform', d => `translate(${d.x0},${d.y0})`);
 
 	node.append('title')
-		.text(d => `${d.ancestors().reverse().map(d => d.data.url).join('/')}\n${format(d.value)}`);
+		.text(d => {
+			return [
+				d.data.url,
+                `${format(d.data.encodedBytes)} bytes`,
+				`${format(d.value)} total bytes`
+            ].join('\n');
+        });
 
 	node.append('rect')
 		.attr('id', (d, i) => (d.nodeUid = `node-${i}`))
@@ -76,18 +82,20 @@
 		.attr('clip-path', d => d.clipUid)
 		.selectAll('tspan')
 		.data(d => {
-			return `${d.data.url} ${d.value} ${d.data.encodedBytes}`;
+			return [d.data.url, d.value, d.data.encodedBytes];
 			// return d.data.url.split(/(?=[A-Z][^A-Z])/g).concat(format(d.data.encodedBytes))
 		})
 		.join('tspan')
 		.attr('fill-opacity', (d, i, nodes) => i === nodes.length - 1 ? 0.7 : null)
-		.text(d => d);
+		.text(d => {
+			return d;
+		});
 
 	node.filter(d => d.data.children).selectAll('tspan')
 		.attr('dx', 3)
 		.attr('y', 13);
 
-	node.filter(d => !d.data.children).selectAll('tspan')
+	node.filter(d => !d.data.children || d.data.children.length === 0).selectAll('tspan')
 		.attr('x', 3)
 		.attr('y', (d, i, nodes) => `${(i === nodes.length - 1) * 0.3 + 1.1 + i * 0.9}em`);
 
