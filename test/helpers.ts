@@ -67,7 +67,7 @@ expect.extend({
 
             if (!child) {
                 return {
-                    message: () => `No request "${url}" exists on node ${inspect(pointer, false, 1, true)}\n` +
+                    message: () => `No request "${url}" exists on node ${inspect(pointer, false, 2, true)}\n` +
                         `Expected     : ${this.utils.printExpected(urls)}\n` +
                         `Got as far as: ${this.utils.printReceived(urls.slice(0, i))}`,
                     pass: false

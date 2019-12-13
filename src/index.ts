@@ -17,6 +17,15 @@ export interface TreeNode {
     children: TreeNode[];
 }
 
+export interface Tree {
+	root: TreeNode,
+	totalNodes: number;
+	/**
+	 * Array of the frame IDs
+	 */
+	frameIDs: string[];
+}
+
 function createNode(params: Network.RequestWillBeSentParams, size: Network.LoadingFinishedParams): TreeNode {
 	return {
 		requestId: params.requestId,
@@ -30,10 +39,11 @@ function createNode(params: Network.RequestWillBeSentParams, size: Network.Loadi
 	};
 }
 
-function convertToTree(requestParams: Network.RequestWillBeSentParams[], additionalData: DataLengths): TreeNode {
+function convertToTree(requestParams: Network.RequestWillBeSentParams[], additionalData: DataLengths): Tree {
 	const initialRequest = requestParams[0];
 
     const tree: TreeNode = createNode(initialRequest, additionalData[initialRequest.requestId]);
+    const frameIds = new Set<string>();
 
     const pointers: { [url: string]: TreeNode } = {
 		[initialRequest.request.url]: tree
@@ -42,6 +52,7 @@ function convertToTree(requestParams: Network.RequestWillBeSentParams[], additio
     // Request[0] is our initiating requestParams
     for (let i = 1; i < requestParams.length; i++) {
         const params = requestParams[i];
+        frameIds.add(params.frameId);
 
         if (params.redirectResponse && params.redirectResponse.url) {
 			const parent = pointers[params.redirectResponse.url];
@@ -87,10 +98,14 @@ function convertToTree(requestParams: Network.RequestWillBeSentParams[], additio
         }
     }
 
-    return tree;
+    return {
+    	root: tree,
+		totalNodes: requestParams.length,
+		frameIDs: Array.from(frameIds.keys())
+	};
 }
 
-export function prettyPrintTree(filename: string, tree: TreeNode): Promise<void> {
+export function prettyPrintTree(filename: string, tree: Tree): Promise<void> {
 	return new Promise((resolve, reject) => {
 		readFile(__dirname + '/graph-template.html', (err, data) => {
 			if (err) {
@@ -98,7 +113,7 @@ export function prettyPrintTree(filename: string, tree: TreeNode): Promise<void>
 			}
 
 			const str = data.toString()
-				.replace('$url', tree.url)
+				.replace('$url', tree.root.url)
 				.replace('$data', JSON.stringify(tree));
 
 			writeFile(filename, str, (writeErr) => {
@@ -112,7 +127,7 @@ export function prettyPrintTree(filename: string, tree: TreeNode): Promise<void>
 }
 
 
-export async function graphUrl(url: string): Promise<{ tree: TreeNode, totalRequests: number }> {
+export async function graphUrl(url: string): Promise<Tree> {
     const requests: Network.RequestWillBeSentParams[] = [];
     const dataLengths: DataLengths = {};
 
@@ -183,10 +198,5 @@ export async function graphUrl(url: string): Promise<{ tree: TreeNode, totalRequ
 
     await browser.close();
 
-    const tree = convertToTree(requests, dataLengths);
-
-    return {
-        tree,
-        totalRequests: requests.length
-    };
+    return convertToTree(requests, dataLengths);
 }
