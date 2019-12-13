@@ -2,10 +2,9 @@ import {Server} from 'http';
 import {inspect} from 'util';
 import {Application} from 'express';
 import {close, createApp, listen} from './helpers';
-import {graphUrl} from '../src';
+import {graphUrl, prettyPrintTree} from '../src';
 
 const port = 8080;
-
 
 describe('Basic', () => {
     let app: Application;
@@ -14,9 +13,8 @@ describe('Basic', () => {
     beforeAll(async () => {
         app = createApp();
 
-        app.get('/redirect-js.js', (req, res) => {
-            res.redirect('js/load-other.js');
-        });
+        app.get('/redirect-js', (req, res) => res.redirect('/redirect-two'));
+        app.get('/redirect-two', (req, res) => res.redirect('js/load-script.js'));
 
         server = await listen(port, app);
     });
@@ -34,15 +32,10 @@ describe('Basic', () => {
 
         expect(totalRequests).toEqual(3);
 
-        expect(tree[pageUrl]).toEqual(expect.objectContaining({
-            status: 200,
-            size: expect.any(Number),
-            children: expect.anything()
-        }));
+        expect(tree[pageUrl]).toBeDefined();
 
         expect(Object.keys(tree[pageUrl].children).length).toEqual(2);
-        expect(tree[pageUrl].children[`${base}/js/basic.js`].status).toEqual(200);
-        expect(tree[pageUrl].children[`${base}/assets/small-image.png`].size).toEqual(3785);
+        expect(tree[pageUrl].children[`${base}/assets/small-image.png`].encodedBytes).toEqual(4064);
 
         expect(tree).toHaveRequestChain(
             pageUrl,
@@ -64,11 +57,7 @@ describe('Basic', () => {
 
         expect(totalRequests).toEqual(4);
 
-        expect(tree[pageUrl]).toEqual(expect.objectContaining({
-            status: 200,
-            size: 168,
-            children: expect.anything()
-        }));
+        expect(tree[pageUrl]).toBeDefined();
 
         expect(tree).toHaveRequestChain(
             pageUrl,
@@ -107,14 +96,42 @@ describe('Basic', () => {
 
         // console.log(inspect(tree, false, null, true));
 
-        expect(totalRequests).toEqual(4);
+        expect(totalRequests).toEqual(6);
 
         expect(tree).toHaveRequestChain(
             pageUrl,
-            `${base}/redirect-js.js`,
+            `${base}/redirect-js`,
+            `${base}/redirect-two`,
             `${base}/js/load-other.js`,
             `${base}/assets/some-data.json`
         );
-    });
+    }, 5000000);
+
+    test('Maps requests that use redirects inside an iframe', async () => {
+        const base = `http://localhost:${port}`;
+        const pageUrl = `${base}/iframe-with-redirects.html`;
+        const {totalRequests, tree} = await graphUrl(pageUrl);
+
+        // console.log(inspect(tree, false, null, true));
+
+        expect(totalRequests).toEqual(7);
+
+        await prettyPrintTree('test.html', tree);
+
+        expect(tree).toHaveRequestChain(
+            pageUrl,
+            `${base}/redirect-js`,
+            `${base}/js/load-other.js`,
+            `${base}/assets/some-data.json`
+        );
+    }, 5000000);
+
+    test('Real page', async () => {
+        const {totalRequests, tree} = await graphUrl('https://www.nature.com/articles/s41598-018-27650-4');
+
+        // console.log(inspect(tree, false, null, true));
+
+        prettyPrintTree('nature.com', tree);
+    }, 5000000);
 
 });

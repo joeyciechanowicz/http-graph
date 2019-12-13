@@ -3,6 +3,8 @@ import path from 'path';
 import express from 'express';
 import {inspect} from "util";
 
+import {TreeNode} from '../src';
+
 export function createApp(): express.Application {
     const app = express();
 
@@ -45,12 +47,12 @@ declare global {
 }
 
 expect.extend({
-    toHaveRequestChain(tree, ...urls) {
+    toHaveRequestChain(tree: TreeNode, ...urls) {
         if (this.isNot) {
             throw new Error('toHaveRequestChain does not support .not');
         }
 
-        let pointer = tree[urls[0]];
+        let pointer = tree;
         if (!pointer) {
             return {
                 message: () => `The tree doesn't contain the first URL ${urls[0]}`,
@@ -61,7 +63,9 @@ expect.extend({
         for (let i = 1; i < urls.length; i++) {
             const url = urls[i];
 
-            if (!pointer || !pointer.children[url]) {
+            const child = pointer.children.find((value => value.url === url));
+
+            if (!child) {
                 return {
                     message: () => `No request "${url}" exists on node ${inspect(pointer, false, 1, true)}\n` +
                         `Expected     : ${this.utils.printExpected(urls)}\n` +
@@ -70,7 +74,7 @@ expect.extend({
                 };
             }
 
-            pointer = pointer.children[url];
+            pointer = child;
         }
 
         return {
