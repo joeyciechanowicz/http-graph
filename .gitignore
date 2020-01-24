@@ -89,11 +89,9 @@ test-reports
 .idea/
 *.iml
 
-src/images/*.json
 coverage/
 yarn-error.log
 profile.json
 
-admin-console/public
 dump.rdb
-test.html
+./*.html

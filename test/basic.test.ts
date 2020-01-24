@@ -1,8 +1,7 @@
 import {Server} from 'http';
-import {inspect} from 'util';
 import {Application} from 'express';
 import {close, createApp, listen} from './helpers';
-import {graphUrl, prettyPrintTree} from '../src';
+import {graphUrl, renderTemplate, writeTreeToFile} from '../src';
 
 const port = 8080;
 
@@ -116,7 +115,8 @@ describe('Basic', () => {
 
         expect(tree.totalNodes).toEqual(8);
 
-        await prettyPrintTree('test.html', tree);
+        // await renderTemplate('zoomable-heatmap.html', tree, require.resolve('../src/zoomable-heatmap-template.html'));
+        await writeTreeToFile('tree.json', tree);
 
         expect(tree.root).toHaveRequestChain(
             pageUrl,
@@ -143,7 +143,7 @@ describe('Basic', () => {
 
         // console.log(inspect(tree, false, null, true));
 
-        prettyPrintTree('nature.com', tree);
+        // prettyPrintTree('nature.com', tree);
     }, 5000000);
 
 });

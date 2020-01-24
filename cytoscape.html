@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>HTTP Graph Viewer</title>
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+
+        body {
+            font-family: sans-serif;
+        }
+
+        body.with-drop-form {
+            height: auto;
+        }
+
+        .drop-form {
+            border: 2px dashed #ccc;
+            border-radius: 20px;
+            width: 90%;
+            margin: 100px auto;
+            padding: 20px;
+        }
+
+        .drop-form.highlight {
+            border: 4px solid #ccc;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 10px;
+            background: #ccc;
+            cursor: pointer;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        .button:hover {
+            background: #ddd;
+        }
+
+        .u-hide {
+            display: none;
+        }
+
+        #cy {
+            width: 100%;
+            height: 100%;
+        }
+
+        #hover-tooltip {
+            position: absolute;
+            border: 2px solid grey;
+            z-index: 35000;
+            transform: translateX(-50%) translateY(-50%);
+            border-radius: 3px;
+            background: #dddddd;
+        }
+    </style>
+
+</head>
+<body class="with-drop-form">
+
+<form class="drop-form">
+    <p>Upload an HTTP graph JSON file</p>
+    <input type="file" class="u-hide" id="fileElem" accept="application/json" onchange="handleFiles(this.files)">
+    <label class="button" for="fileElem">Upload a file</label>
+</form>
+
+<div id="cy" class="u-hide"></div>
+<div id="hover-tooltip" class="u-hide"></div>
+
+<script type="module">
+	const dropArea = document.body;
+	const dropForm = document.getElementsByClassName('drop-form')[0];
+	const cyContainer = document.getElementById('cy');
+	const hoverTooltip = document.getElementById('hover-tooltip');
+
+	['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => dropArea.addEventListener(eventName, preventDefaults, false));
+	['dragenter', 'dragover'].forEach(eventName => dropArea.addEventListener(eventName, () => dropForm.classList.add('highlight'), false));
+	['dragleave', 'drop'].forEach(eventName => dropArea.addEventListener(eventName, () => dropForm.classList.remove('highlight'), false));
+
+	function preventDefaults(e) {
+		e.preventDefault();
+		e.stopPropagation();
+	}
+
+	dropArea.addEventListener('drop', e => handleFiles(e.dataTransfer.files), false);
+
+	async function handleFiles(files) {
+		const file = files.item(0);
+		const contents = await file.text();
+		const tree = JSON.parse(contents);
+		showGraph(tree);
+    }
+
+    const id = node => `${node.requestId}:${node.url}`;
+
+    function presentNode(totalBytes, node, parent) {
+		return {
+			group: 'nodes',
+			data: {
+				id: id(node),
+				...node,
+				children: undefined,
+				bytePercent: ((node.encodedBytes / totalBytes) * 100) / 4
+			}
+		};
+    }
+
+    function presentEdge(node, parent) {
+		return {
+			group: 'edges',
+            data: {
+				id: `edge-${id(node)}-${id(parent)}`,
+                source: id(parent),
+                target: id(node),
+                time: node.time
+            }
+        }
+    }
+
+    function reduceNode(totalBytes, node) {
+        return node.children.reduce((acc, curr) => {
+        	return acc
+                .concat(presentNode(totalBytes, curr, node))
+                .concat(presentEdge(curr, node))
+                .concat(...reduceNode(totalBytes, curr))
+        }, []);
+    }
+
+    function showGraph(tree) {
+		dropForm.classList.add('u-hide');
+		cyContainer.classList.remove('u-hide');
+		document.body.classList.remove('with-drop-form');
+
+		const startNode = {
+			requestId: 'start',
+            url: 'start',
+            startingNode: true,
+			encodedBytes: 1,
+            children: [
+            	tree.root
+            ]
+        };
+
+		const elements = [
+			presentNode(tree.totalBytes, startNode),
+            ...reduceNode(tree.totalBytes, startNode)
+        ];
+
+		console.log(tree);
+		console.log(elements);
+
+		const cy = cytoscape({
+			container: cyContainer,
+            elements,
+
+			style: [
+				{
+					selector: 'node',
+					style: {
+						'label': 'data(url)',
+                        height: 'data(bytePercent)',
+                        width: 'data(bytePercent)',
+						'font-size': 3
+					}
+				},
+                {
+                	selector: 'edge',
+                    style: {
+                		width: 0.8,
+                        'line-color': '#ad1a66',
+                        'curve-style':'bezier',
+						'target-arrow-shape': 'triangle',
+						'arrow-scale': 0.4
+                    }
+                },
+                {
+                	selector: '[startingNode]',
+					style: {
+
+					}
+                }
+			]
+		});
+
+		const layout = cy.layout({
+            name: 'cose',
+            animate: 'end',
+			idealEdgeLength: edge => edge.data().time * 10,
+        });
+		layout.run();
+
+		cy.on('mouseover', 'node', e => {
+            hoverTooltip.classList.remove('u-hide');
+            hoverTooltip.style.top = Math.floor(e.renderedPosition.y).toString() + 'px';
+			hoverTooltip.style.left = Math.floor(e.renderedPosition.x).toString() + 'px';
+
+			const data = e.target.data();
+
+			hoverTooltip.innerHTML = `<pre>${JSON.stringify(data, null, '\t')}`;
+			console.log(e);
+        });
+
+		cy.on('mouseout', 'node', e => {
+			hoverTooltip.classList.add('u-hide');
+        });
+    }
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.10.2/cytoscape.min.js"
+        defer
+        async
+        integrity="sha256-6h61EhH/gL/t32vHghM/70U5k4hiB8XMnMQ2lCYV0k0=" crossorigin="anonymous"></script>
+</body>
+</html>
