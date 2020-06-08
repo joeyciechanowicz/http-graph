@@ -1,7 +1,8 @@
 import {Server} from 'http';
+import {inspect} from 'util';
 import {Application} from 'express';
 import {close, createApp, listen} from './helpers';
-import {graphUrl, renderTemplate, writeTreeToFile} from '../src';
+import {graphUrl, writeTreeToFile} from '../src';
 
 const port = 8080;
 
@@ -25,49 +26,48 @@ describe('Basic', () => {
     test('Maps basic requests', async () => {
         const base = `http://localhost:${port}`;
         const pageUrl = `${base}/basic.html`;
-        const {root, totalNodes} = await graphUrl(pageUrl);
+        const tree = await graphUrl(pageUrl);
 
         // console.log(inspect(tree, false, null, true));
 
-        expect(totalNodes).toEqual(3);
+        expect(tree.totalRequests).toEqual(3);
+        expect(tree.root).toBeDefined();
+        expect(tree.root.children.length).toEqual(2);
 
-        expect(root).toBeDefined();
-
-        expect(root.children.length).toEqual(2);
-        expect(root.children[0].encodedBytes).toEqual(4064);
-
-        expect(root).toHaveRequestChain(
-            pageUrl,
-            `${base}/js/basic.js`
+        expect(tree.root).toHaveRequestChain(
+            [200, pageUrl],
+            [200, `${base}/js/basic.js`],
         );
 
-        expect(root).toHaveRequestChain(
-            pageUrl,
-            `${base}/assets/small-image.png`
+        expect(tree.root).toHaveRequestChain(
+            [200, pageUrl],
+            [200, `${base}/assets/small-image.png`],
         );
+
+        expect(tree.totalBytes).toEqual(4064);
     });
 
     test('Maps requests from an iframe', async () => {
         const base = `http://localhost:${port}`;
         const pageUrl = `${base}/iframe.html`;
-        const {root, totalNodes} = await graphUrl(pageUrl);
+        const {root, totalRequests} = await graphUrl(pageUrl);
 
-        // console.log(inspect(tree, false, null, true));
+        // console.log(inspect(root, false, null, true));
 
-        expect(totalNodes).toEqual(4);
+        expect(totalRequests).toEqual(4);
 
         expect(root).toBeDefined();
 
         expect(root).toHaveRequestChain(
-            pageUrl,
-            `${base}/basic.html`,
-            `${base}/js/basic.js`
+            [200, pageUrl],
+            [200, `${base}/basic.html`],
+            [200, `${base}/js/basic.js`],
         );
 
         expect(root).toHaveRequestChain(
-            pageUrl,
-            `${base}/basic.html`,
-            `${base}/assets/small-image.png`
+            [200, pageUrl],
+            [200, `${base}/basic.html`],
+            [200, `${base}/assets/small-image.png`],
         );
     });
 
@@ -75,36 +75,66 @@ describe('Basic', () => {
     test('Maps requests loaded from js', async () => {
         const base = `http://localhost:${port}`;
         const pageUrl = `${base}/load-using-js.html`;
-        const {root, totalNodes} = await graphUrl(pageUrl);
+        const {root, totalRequests} = await graphUrl(pageUrl);
 
-        // console.log(inspect(tree, false, null, true));
+        // console.log(inspect(root, false, null, true));
 
-        expect(totalNodes).toEqual(3);
+        expect(totalRequests).toEqual(4);
 
         expect(root).toHaveRequestChain(
-            pageUrl,
-            `${base}/js/load-other.js`,
-            `${base}/assets/some-data.json`
+            [200, pageUrl],
+            [200, `${base}/js/load-other.js`],
+            [200, `${base}/assets/some-data.json`],
         );
+
+	    expect(root).toHaveRequestChain(
+		    [200, pageUrl],
+		    [200, `${base}/js/load-other.js`],
+		    [200, `${base}/assets/some-data-large.json`],
+	    );
     });
 
     test('Maps requests that use redirects', async () => {
         const base = `http://localhost:${port}`;
         const pageUrl = `${base}/redirect-asset.html`;
-        const {root, totalNodes} = await graphUrl(pageUrl);
+        const {root, totalRequests} = await graphUrl(pageUrl);
 
-        // console.log(inspect(tree, false, null, true));
+        // console.log(inspect(root, false, null, true));
 
-        expect(totalNodes).toEqual(6);
+        expect(totalRequests).toEqual(7);
 
         expect(root).toHaveRequestChain(
-            pageUrl,
-            `${base}/redirect-js`,
-            `${base}/redirect-two`,
-            `${base}/js/load-other.js`,
-            `${base}/assets/some-data.json`
+            [200, pageUrl],
+            [302, `${base}/redirect-js`],
+            [302, `${base}/redirect-two`],
+            [200, `${base}/js/load-other.js`],
+            [200, `${base}/assets/some-data.json`],
         );
+
+	    expect(root).toHaveRequestChain(
+		    [200, pageUrl],
+		    [302, `${base}/redirect-js`],
+		    [302, `${base}/redirect-two`],
+		    [200, `${base}/js/load-other.js`],
+		    [200, `${base}/assets/some-large.json`],
+	    );
     }, 5000000);
+
+    test('debug purpoess', async () => {
+	    // @ts-ignore
+	    const debug = typeof v8debug === 'object'
+		    || /--debug|--inspect/.test(process.execArgv.join(' '));
+
+    	if (debug) {
+		    console.log(`http://localhost:${port} : ${debug}`);
+		    return new Promise((resolve) => {
+			    setTimeout(() => {
+				    resolve();
+			    }, 80000);
+		    });
+	    }
+
+    }, 100000);
 
     test('Maps requests that use redirects inside an iframe', async () => {
         const base = `http://localhost:${port}`;
@@ -113,32 +143,29 @@ describe('Basic', () => {
 
         // console.log(inspect(tree, false, null, true));
 
-        expect(tree.totalNodes).toEqual(8);
-
-        // await renderTemplate('zoomable-heatmap.html', tree, require.resolve('../src/zoomable-heatmap-template.html'));
-        await writeTreeToFile('tree.json', tree);
+        expect(tree.totalRequests).toEqual(8);
 
         expect(tree.root).toHaveRequestChain(
-            pageUrl,
-            `${base}/redirect-asset.html`,
-            `${base}/redirect-js`,
-            `${base}/redirect-two`,
-            `${base}/js/load-script.js`,
-            `${base}/js/load-other.js`,
-            `${base}/assets/some-data-small.json`
+            [200, pageUrl],
+            [304, `${base}/redirect-asset.html`],
+            [302, `${base}/redirect-js`],
+            [302, `${base}/redirect-two`],
+            [200, `${base}/js/load-script.js`],
+            [200, `${base}/js/load-other.js`],
+            [200,`${base}/assets/some-data-small.json`]
         );
         expect(tree.root).toHaveRequestChain(
-            pageUrl,
-            `${base}/redirect-asset.html`,
-            `${base}/redirect-js`,
-            `${base}/redirect-two`,
-            `${base}/js/load-script.js`,
-            `${base}/js/load-other.js`,
-            `${base}/assets/some-data-large.json`
+            [200, pageUrl],
+            [304, `${base}/redirect-asset.html`],
+            [302, `${base}/redirect-js`],
+            [302, `${base}/redirect-two`],
+            [200, `${base}/js/load-script.js`],
+            [200, `${base}/js/load-other.js`],
+            [200, `${base}/assets/some-data-large.json`],
         );
     }, 5000000);
 
-    test('Real page', async () => {
+    test.skip('Real page', async () => {
         const tree = await graphUrl('https://www.nature.com/articles/s41598-018-27650-4');
 
         // console.log(inspect(tree, false, null, true));

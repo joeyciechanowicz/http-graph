@@ -1,7 +1,7 @@
 {
   "name": "http-graph",
   "version": "1.0.0",
-  "description": "",
+  "description": "Map out a website and visualise the dependencies and their affect on page load",
   "main": "dist/index.js",
   "scripts": {
     "prebuild": "tslint -c tslint.json -p tsconfig.json --fix",
@@ -15,25 +15,25 @@
     "url": "git+https://github.com/joeyciechanowicz/http-graph.git"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Joey Ciechanowicz",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/joeyciechanowicz/http-graph/issues"
   },
   "homepage": "https://github.com/joeyciechanowicz/http-graph#readme",
   "dependencies": {
-    "@types/express": "^4.17.2",
-    "puppeteer": "^2.0.0"
+    "puppeteer": "^3.3.0"
   },
   "devDependencies": {
-    "@types/jest": "^24.0.23",
-    "@types/node": "^12.12.14",
-    "@types/puppeteer": "^1.20.2",
+    "@types/express": "^4.17.6",
+    "@types/jest": "^25.2.3",
+    "@types/node": "^14.0.11",
+    "@types/puppeteer": "^3.0.0",
     "@types/treeify": "^1.0.0",
     "express": "^4.17.1",
-    "jest": "^24.9.0",
-    "ts-jest": "^24.2.0",
-    "tslint": "^5.20.1",
-    "typescript": "^3.7.3"
+    "jest": "^26.0.1",
+    "ts-jest": "^26.1.0",
+    "tslint": "^6.1.2",
+    "typescript": "^3.9.5"
   }
 }

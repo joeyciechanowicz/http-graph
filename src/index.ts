@@ -21,7 +21,7 @@ export interface TreeNode {
 
 export interface Tree {
     root: TreeNode,
-    totalNodes: number;
+    totalRequests: number;
     totalBytes: number;
     /**
      * Array of the frame IDs
@@ -111,7 +111,7 @@ function convertToTree(requestParams: Network.RequestWillBeSentParams[], respons
 
     return {
         root: tree,
-        totalNodes: requestParams.length,
+        totalRequests: requestParams.length,
         totalBytes: totalBytes,
         frameIDs: Array.from(frameIds.keys())
     };
@@ -124,27 +124,6 @@ export function writeTreeToFile(filename: string, tree: Tree): Promise<void> {
                 return reject(err);
             }
             resolve();
-        });
-    });
-}
-
-export function renderTemplate(filename: string, tree: Tree, template: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-        readFile(template, (err, data) => {
-            if (err) {
-                return reject(err);
-            }
-
-            const str = data.toString()
-                .replace('$url', tree.root.url)
-                .replace('$data', JSON.stringify(tree));
-
-            writeFile(filename, str, (writeErr) => {
-                if (writeErr) {
-                    return reject(writeErr);
-                }
-                resolve();
-            });
         });
     });
 }
