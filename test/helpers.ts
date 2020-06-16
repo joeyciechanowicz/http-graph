@@ -10,6 +10,12 @@ export function createApp(): express.Application {
 
     app.use(express.static(path.resolve(__dirname, './static')));
 
+    app.get('/redirect-basic-1', (req, res) => res.redirect('/redirect-basic-2'));
+    app.get('/redirect-basic-2', (req, res) => res.redirect('/js/basic.js'));
+
+    app.get('/redirect-js', (req, res) => res.redirect('/redirect-two'));
+    app.get('/redirect-two', (req, res) => res.redirect('js/load-script.js'));
+
     return app;
 }
 
@@ -68,9 +74,10 @@ expect.extend({
 
             if (!child) {
                 return {
-                    message: () => `No request "${url[0]} - ${url[1]}" exists on node ${inspect(pointer, false, 2, true)}\n` +
+                    message: () =>
                         `Expected     : ${this.utils.printExpected(urls)}\n` +
-                        `Got as far as: ${this.utils.printReceived(urls.slice(0, i))}`,
+                        `Got as far as: ${this.utils.printReceived(urls.slice(0, i))}\n\n` +
+                        `No request "${url[0]} - ${url[1]}" exists on node ${inspect(pointer, false, 2, true)}\n`,
                     pass: false
                 };
             }

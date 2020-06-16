@@ -12,10 +12,6 @@ describe('Basic', () => {
 
     beforeAll(async () => {
         app = createApp();
-
-        app.get('/redirect-js', (req, res) => res.redirect('/redirect-two'));
-        app.get('/redirect-two', (req, res) => res.redirect('js/load-script.js'));
-
         server = await listen(port, app);
     });
 
@@ -44,7 +40,7 @@ describe('Basic', () => {
             [200, `${base}/assets/small-image.png`],
         );
 
-        expect(tree.totalBytes).toEqual(4064);
+        expect(tree.totalBytes).toEqual(4954);
     });
 
     test('Maps requests from an iframe', async () => {
@@ -84,7 +80,7 @@ describe('Basic', () => {
         expect(root).toHaveRequestChain(
             [200, pageUrl],
             [200, `${base}/js/load-other.js`],
-            [200, `${base}/assets/some-data.json`],
+            [200, `${base}/assets/some-data-small.json`],
         );
 
 	    expect(root).toHaveRequestChain(
@@ -93,6 +89,22 @@ describe('Basic', () => {
 		    [200, `${base}/assets/some-data-large.json`],
 	    );
     });
+
+    test('Maps basic redirects', async () => {
+        const base = `http://localhost:${port}`;
+        const pageUrl = `${base}/redirect-basic.html`;
+        const {root, totalRequests} = await graphUrl(pageUrl);
+
+        expect(totalRequests).toEqual(4);
+
+        expect(root).toHaveRequestChain(
+            [200, pageUrl],
+            [302, `${base}/redirect-basic-1`],
+            [302, `${base}/redirect-basic-2`],
+            [304, `${base}/js/basic.js`],
+        );
+
+    }, 5000000);
 
     test('Maps requests that use redirects', async () => {
         const base = `http://localhost:${port}`;
@@ -119,22 +131,6 @@ describe('Basic', () => {
 		    [200, `${base}/assets/some-large.json`],
 	    );
     }, 5000000);
-
-    test('debug purpoess', async () => {
-	    // @ts-ignore
-	    const debug = typeof v8debug === 'object'
-		    || /--debug|--inspect/.test(process.execArgv.join(' '));
-
-    	if (debug) {
-		    console.log(`http://localhost:${port} : ${debug}`);
-		    return new Promise((resolve) => {
-			    setTimeout(() => {
-				    resolve();
-			    }, 80000);
-		    });
-	    }
-
-    }, 100000);
 
     test('Maps requests that use redirects inside an iframe', async () => {
         const base = `http://localhost:${port}`;

@@ -1,10 +1,10 @@
-import {readFile, writeFile} from 'fs';
-import util from 'util';
+import {writeFile} from 'fs';
 import puppeteer from 'puppeteer';
 import {CDPSession, Network} from './chrome-devtools-protocol';
 
 type DataLengths = { [requestId: string]: Network.LoadingFinishedParams };
 type Responses = { [requestId: string]: Network.ResponseReceivedParams };
+type Redirects = { [url: string]: Network.Response };
 
 export interface TreeNode {
     requestId: string;
@@ -29,15 +29,29 @@ export interface Tree {
     frameIDs: string[];
 }
 
+class ErrorWithPayload<T> extends Error {
+    constructor(message: string, public readonly payload: T) {
+        super(message);
+    }
+}
+
 function createNode(params: Network.RequestWillBeSentParams, responseParams: Network.ResponseReceivedParams): TreeNode {
     // TODO: Add Initiator
     // responseParams do not seem to be correct for the request
+
+    // this is the size of the http request
+    let size = responseParams.response.encodedDataLength;
+    if (responseParams.response.headers['Content-Length']) {
+        // we have content so need to add the size of it to the size of our HTTP request
+        size += parseInt(responseParams.response.headers['Content-Length']);
+    }
+
     return {
         requestId: params.requestId,
         url: params.request.url,
         method: params.request.method,
         type: params.type,
-        encodedBytes: responseParams.response.encodedDataLength,
+        encodedBytes: size,
         frameId: params.frameId,
         status: responseParams.response.status,
         time: responseParams.timestamp - responseParams.response.timing.requestTime,
@@ -45,7 +59,7 @@ function createNode(params: Network.RequestWillBeSentParams, responseParams: Net
     };
 }
 
-function convertToTree(requestParams: Network.RequestWillBeSentParams[], responses: Responses): Tree {
+function convertToTree(requestParams: Network.RequestWillBeSentParams[], responses: Responses, redirects: Redirects): Tree {
     const initialRequest = requestParams[0];
 
     const tree: TreeNode = createNode(initialRequest, responses[initialRequest.requestId]);
@@ -56,57 +70,107 @@ function convertToTree(requestParams: Network.RequestWillBeSentParams[], respons
         [initialRequest.request.url]: tree
     };
 
+    function getParent(initiator: Network.Initiator): TreeNode {
+        switch (initiator.type) {
+            case 'parser': {
+                return pointers[initiator.url];
+            }
+            case 'script': {
+                // We have a JS loaded request
+                // we iterate the stack till we can find a child we can attach this request to
+                for (let stackIndex = 0; stackIndex < initiator.stack.callFrames.length; stackIndex++) {
+                    const frame = initiator.stack.callFrames[stackIndex];
+                    if (pointers[frame.url]) {
+                        return pointers[frame.url];
+                    }
+                }
+            }
+        }
+
+        throw new ErrorWithPayload('Could not locate a parent for initiator', initiator);
+    }
+
+    function addResponseToTree(params: Network.RequestWillBeSentParams, response: Network.ResponseReceivedParams) {
+        const parent = getParent(params.initiator as Network.Initiator);
+
+        const node = createNode(params, responses[params.requestId]);
+        const length = parent.children.push(node);
+        pointers[params.request.url] = parent.children[length - 1];
+        totalBytes += node.encodedBytes;
+    }
+
+    function addRedirectToTree(params: Network.RequestWillBeSentParams, redirect: Network.Response) {
+
+    }
+
     // Request[0] is our initiating requestParams
     for (let i = 1; i < requestParams.length; i++) {
         const params = requestParams[i];
         frameIds.add(params.frameId);
 
-        if (params.redirectResponse && params.redirectResponse.url) {
-            const parent = pointers[params.redirectResponse.url];
-            const node = createNode(params, responses[params.requestId]);
-            const length = parent.children.push(node);
-            pointers[params.request.url] = parent.children[length - 1];
-            totalBytes += node.encodedBytes;
-
+        if (redirects[params.request.url]) {
+            addRedirectToTree(params, redirects[params.requestId]);
             continue;
         }
 
-        if (params.initiator.type === 'script') {
-            const initiator = params.initiator as Network.Initiator;
-            // We have a JS loaded request
-            // we iterate the stack till we can find a child we can attach this request to
-            let found = false;
-            for (let stackIndex = 0; stackIndex < initiator.stack.callFrames.length; stackIndex++) {
-                const frame = initiator.stack.callFrames[stackIndex];
-                if (pointers[frame.url]) {
-                    const parent = pointers[frame.url];
-                    const node = createNode(params, responses[params.requestId]);
-                    const length = parent.children.push(node);
-                    pointers[params.request.url] = parent.children[length - 1];
-                    totalBytes += node.encodedBytes;
-
-                    found = true;
-                    break;
-                }
-            }
-
-            if (!found) {
-                console.error(`Could not find a parent for script request`, params);
-            }
-        } else if (params.initiator.type === 'parser') {
-            const initiator = params.initiator as Network.Initiator;
-
-            const parent = pointers[initiator.url];
-            if (!parent) {
-                console.error(`Got initiator with no pointer set: ${initiator}`);
-                continue;
-            }
-
-            const length = parent.children.push(createNode(params, responses[params.requestId]));
-            pointers[params.request.url] = parent.children[length - 1];
-        } else {
-            console.error(`Unsupported initiator type "${params.initiator.type}"`, util.inspect(params));
+        if (responses[params.requestId]) {
+            addResponseToTree(params, responses[params.requestId]);
+            continue;
         }
+
+        throw new ErrorWithPayload('No response or redirect for request', params);
+
+        //
+        //
+        // if (params.redirectResponse && params.redirectResponse.url) {
+        //     const parent = pointers[params.redirectResponse.url];
+        //     const node = createNode(params, responses[params.requestId]);
+        //     const length = parent.children.push(node);
+        //     pointers[params.request.url] = parent.children[length - 1];
+        //     totalBytes += node.encodedBytes;
+        //
+        //     continue;
+        // }
+        //
+        // if (params.initiator.type === 'script') {
+        //     const initiator = params.initiator as Network.Initiator;
+        //     // We have a JS loaded request
+        //     // we iterate the stack till we can find a child we can attach this request to
+        //     let found = false;
+        //     for (let stackIndex = 0; stackIndex < initiator.stack.callFrames.length; stackIndex++) {
+        //         const frame = initiator.stack.callFrames[stackIndex];
+        //         if (pointers[frame.url]) {
+        //             const parent = pointers[frame.url];
+        //             const node = createNode(params, responses[params.requestId]);
+        //             const length = parent.children.push(node);
+        //             pointers[params.request.url] = parent.children[length - 1];
+        //             totalBytes += node.encodedBytes;
+        //
+        //             found = true;
+        //             break;
+        //         }
+        //     }
+        //
+        //     if (!found) {
+        //         console.error(`Could not find a parent for script request`, params);
+        //     }
+        // } else if (params.initiator.type === 'parser') {
+        //     const initiator = params.initiator as Network.Initiator;
+        //
+        //     const parent = pointers[initiator.url];
+        //     if (!parent) {
+        //         console.error(`Got initiator with no pointer set: ${initiator}`);
+        //         continue;
+        //     }
+        //
+        //     const node = createNode(params, responses[params.requestId]);
+        //     const length = parent.children.push(node);
+        //     pointers[params.request.url] = parent.children[length - 1];
+        //     totalBytes += node.encodedBytes;
+        // } else {
+        //     console.error(`Unsupported initiator type "${params.initiator.type}"`, util.inspect(params));
+        // }
+
     }
 
     return {
@@ -133,20 +197,20 @@ export async function graphUrl(url: string): Promise<Tree> {
     // const dataLengths: DataLengths = {};
     const responses: Responses = {};
 
+    const redirects: Redirects = {};
+
     const browser = await puppeteer.launch({
         headless: true
     });
 
     const page = await browser.newPage();
     const client = await page.target().createCDPSession() as CDPSession;
+
     await client.send('Network.enable');
     await client.send('Network.setCacheDisabled', {cacheDisabled: true});
     await client.send('Network.setBypassServiceWorker', {bypass: true});
 
-    // client.on('Network.loadingFinished', (params) => {
-    // 	dataLengths[params.requestId] = params;
-    // });
-
+    // Fired when a response is received from the server. We don't receive response for redirects
     client.on('Network.responseReceived', (params) => {
         responses[params.requestId] = params;
     });
@@ -196,6 +260,14 @@ export async function graphUrl(url: string): Promise<Tree> {
         }
 
         requests.push(params);
+
+        if (params.redirectResponse) {
+            // we'll emit a fake responseReceived event
+            redirects[params.redirectResponse.url] = params.redirectResponse;
+            client.emit('Network.responseReceived', {
+                requestId: 'asd'
+            } as Network.ResponseReceivedParams);
+        }
     });
 
     await page.goto(url, {
@@ -204,5 +276,5 @@ export async function graphUrl(url: string): Promise<Tree> {
 
     await browser.close();
 
-    return convertToTree(requests, responses);
+    return convertToTree(requests, responses, redirects);
 }
